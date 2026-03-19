@@ -87,6 +87,8 @@ instance : NodeOps ArithOp where
       simp [NodeOps.children] at hlen
       match ids, hlen with | [a, b], _ => simp [NodeOps.replaceChildren, NodeOps.mapChildren]
 
+  mapChildren_replaceChildren f op := by
+    cases op <;> simp [NodeOps.children, NodeOps.mapChildren, NodeOps.replaceChildren]
 -- ══════════════════════════════════════════════════════════════════
 -- Section 3: Arithmetic Expression Type + Extractable/EvalExpr
 -- ══════════════════════════════════════════════════════════════════

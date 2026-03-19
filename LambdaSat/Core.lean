@@ -35,6 +35,10 @@ class NodeOps (Op : Type) where
     ids.length = (children op).length →
     mapChildren (fun _ => (0 : EClassId)) (replaceChildren op ids) =
       mapChildren (fun _ => (0 : EClassId)) op
+  /-- Law: `mapChildren f op = replaceChildren op ((children op).map f)`.
+      This relates the two child-transforming operations. -/
+  mapChildren_replaceChildren : ∀ (f : EClassId → EClassId) (op : Op),
+    mapChildren f op = replaceChildren op ((children op).map f)
 
 /-- An e-node wraps a domain-specific operation. -/
 structure ENode (Op : Type) where
