@@ -381,10 +381,12 @@ def PreservesCV (env : Nat → Val) (step : EGraph Op → EGraph Op) : Prop :=
     ∃ v', ConsistentValuation (step g) env v' ∧
           PostMergeInvariant (step g) ∧
           SemanticHashconsInv (step g) env v' ∧
-          HashconsChildrenBounded (step g)
+          HashconsChildrenBounded (step g) ∧
+          (∀ i, i < g.unionFind.parent.size → v' i = v i) ∧
+          g.unionFind.parent.size ≤ (step g).unionFind.parent.size
 
 set_option linter.unusedSectionVars false in
-/-- foldl preserves the quadruple when each element's step does. -/
+/-- foldl preserves the quadruple + agreement + size when each element's step does. -/
 theorem foldl_preserves_cv {α : Type} (env : Nat → Val) (l : List α)
     (f : EGraph Op → α → EGraph Op)
     (hf : ∀ a ∈ l, PreservesCV env (fun g => f g a))
@@ -396,13 +398,20 @@ theorem foldl_preserves_cv {α : Type} (env : Nat → Val) (l : List α)
     ∃ v', ConsistentValuation (l.foldl f g) env v' ∧
           PostMergeInvariant (l.foldl f g) ∧
           SemanticHashconsInv (l.foldl f g) env v' ∧
-          HashconsChildrenBounded (l.foldl f g) := by
+          HashconsChildrenBounded (l.foldl f g) ∧
+          (∀ i, i < g.unionFind.parent.size → v' i = v i) ∧
+          g.unionFind.parent.size ≤ (l.foldl f g).unionFind.parent.size := by
   induction l generalizing g v with
-  | nil => exact ⟨v, hcv, hpmi, hshi, hhcb⟩
+  | nil => exact ⟨v, hcv, hpmi, hshi, hhcb, fun _ _ => rfl, Nat.le.refl⟩
   | cons a as ih =>
     have hmem : a ∈ a :: as := by simp
-    obtain ⟨v1, hcv1, hpmi1, hshi1, hhcb1⟩ := hf a hmem g v hcv hpmi hshi hhcb
-    exact ih (fun a' ha' => hf a' (by simp [ha'])) (f g a) v1 hcv1 hpmi1 hshi1 hhcb1
+    obtain ⟨v1, hcv1, hpmi1, hshi1, hhcb1, hagrees1, hsize1⟩ :=
+      hf a hmem g v hcv hpmi hshi hhcb
+    obtain ⟨v', hcv', hpmi', hshi', hhcb', hagrees', hsize'⟩ :=
+      ih (fun a' ha' => hf a' (by simp [ha'])) (f g a) v1 hcv1 hpmi1 hshi1 hhcb1
+    exact ⟨v', hcv', hpmi', hshi', hhcb',
+      fun i hi => (hagrees' i (Nat.lt_of_lt_of_le hi hsize1)).trans (hagrees1 i hi),
+      Nat.le_trans hsize1 hsize'⟩
 
 /-- processAll preserves HashconsChildrenBounded. -/
 private theorem processAll_preserves_hcb :
@@ -466,6 +475,42 @@ theorem rebuildStepBody_preserves_cv (env : Nat → Val) (g : EGraph Op)
   let ⟨hcv', hpmi', hshi'⟩ := rebuildStepBody_preserves_triple g env v hcv hpmi hshi
   ⟨hcv', hpmi', hshi', rebuildStepBody_preserves_hcb g hpmi hhcb⟩
 
+/-- foldl merge preserves UF size. -/
+private theorem mergeAll_uf_size (merges : List (EClassId × EClassId)) (g : EGraph Op) :
+    (merges.foldl (fun acc p => acc.merge p.1 p.2) g).unionFind.parent.size =
+    g.unionFind.parent.size := by
+  induction merges generalizing g with
+  | nil => rfl
+  | cons hd tl ih => simp only [List.foldl_cons]; rw [ih]; exact merge_uf_size g hd.1 hd.2
+
+/-- foldl processClass preserves UF size (on the graph component). -/
+private theorem processAll_uf_size (l : List EClassId) (g : EGraph Op)
+    (merges : List (EClassId × EClassId)) :
+    (l.foldl (fun (acc : EGraph Op × List (EClassId × EClassId)) classId =>
+      let r := acc.1.processClass classId
+      (r.1, r.2 ++ acc.2)) (g, merges)).1.unionFind.parent.size =
+    g.unionFind.parent.size := by
+  induction l generalizing g merges with
+  | nil => rfl
+  | cons _ _ ih => simp only [List.foldl_cons]; rw [ih]; exact processClass_uf_size g _
+
+/-- rebuildStepBody preserves UF size. Follows from processClass_uf_size + merge_uf_size. -/
+theorem rebuildStepBody_uf_size (g : EGraph Op) :
+    (rebuildStepBody g).unionFind.parent.size = g.unionFind.parent.size := by
+  simp only [rebuildStepBody]
+  rw [mergeAll_uf_size, processAll_uf_size]
+
+/-- rebuildF preserves UF size (induction on fuel). -/
+theorem rebuildF_uf_size (g : EGraph Op) (fuel : Nat) :
+    (rebuildF g fuel).unionFind.parent.size = g.unionFind.parent.size := by
+  induction fuel generalizing g with
+  | zero => rfl
+  | succ n ih =>
+    simp only [rebuildF]
+    split
+    · rfl
+    · rw [ih, rebuildStepBody_uf_size]
+
 /-- rebuildF preserves the quadruple with the same v. -/
 theorem rebuildF_preserves_cv (env : Nat → Val) (fuel : Nat)
     (g : EGraph Op) (v : EClassId → Val) (hcv : ConsistentValuation g env v)
@@ -486,7 +531,7 @@ theorem rebuildF_preserves_cv (env : Nat → Val) (fuel : Nat)
       exact ih (rebuildStepBody g) v hcv' hpmi' hshi' hhcb'
 
 set_option linter.unusedSectionVars false in
-/-- applyRulesF preserves the quadruple when each rule application does. -/
+/-- applyRulesF preserves the quadruple + agreement + size when each rule does. -/
 theorem applyRulesF_preserves_cv (fuel : Nat) (env : Nat → Val)
     (rules : List (RewriteRule Op))
     (h_rules : ∀ rule ∈ rules, PreservesCV env (applyRuleF fuel · rule))
@@ -497,13 +542,15 @@ theorem applyRulesF_preserves_cv (fuel : Nat) (env : Nat → Val)
     ∃ v', ConsistentValuation (applyRulesF fuel g rules) env v' ∧
           PostMergeInvariant (applyRulesF fuel g rules) ∧
           SemanticHashconsInv (applyRulesF fuel g rules) env v' ∧
-          HashconsChildrenBounded (applyRulesF fuel g rules) := by
+          HashconsChildrenBounded (applyRulesF fuel g rules) ∧
+          (∀ i, i < g.unionFind.parent.size → v' i = v i) ∧
+          g.unionFind.parent.size ≤ (applyRulesF fuel g rules).unionFind.parent.size := by
   simp only [applyRulesF]
   exact foldl_preserves_cv env rules (fun g r => applyRuleF fuel g r)
     h_rules g v hcv hpmi hshi hhcb
 
-/-- Main soundness theorem: saturateF preserves ConsistentValuation
-    when each rule application preserves the quadruple. -/
+/-- Main soundness theorem: saturateF preserves ConsistentValuation + agreement.
+    v1.6.0: now returns valuation agreement on original IDs. -/
 theorem saturateF_preserves_consistent (fuel maxIter rebuildFuel : Nat)
     (g : EGraph Op) (rules : List (RewriteRule Op))
     (env : Nat → Val) (v : EClassId → Val)
@@ -511,18 +558,27 @@ theorem saturateF_preserves_consistent (fuel maxIter rebuildFuel : Nat)
     (hpmi : PostMergeInvariant g) (hshi : SemanticHashconsInv g env v)
     (hhcb : HashconsChildrenBounded g)
     (h_rules : ∀ rule ∈ rules, PreservesCV env (applyRuleF fuel · rule)) :
-    ∃ v', ConsistentValuation (saturateF fuel maxIter rebuildFuel g rules) env v' := by
+    ∃ v', ConsistentValuation (saturateF fuel maxIter rebuildFuel g rules) env v' ∧
+          (∀ i, i < g.unionFind.parent.size → v' i = v i) := by
   induction maxIter generalizing g v with
-  | zero => exact ⟨v, hcv⟩
+  | zero => exact ⟨v, hcv, fun _ _ => rfl⟩
   | succ n ih =>
     simp only [saturateF]
-    obtain ⟨v1, hcv1, hpmi1, hshi1, hhcb1⟩ :=
+    obtain ⟨v1, hcv1, hpmi1, hshi1, hhcb1, hagrees1, hsize1⟩ :=
       applyRulesF_preserves_cv fuel env rules h_rules g v hcv hpmi hshi hhcb
     have ⟨hcv2, hpmi2, hshi2, hhcb2⟩ :=
       rebuildF_preserves_cv env rebuildFuel (applyRulesF fuel g rules) v1 hcv1 hpmi1 hshi1 hhcb1
+    -- rebuildF preserves same v1, and UF size is preserved by rebuildF_uf_size
+    have hagrees_rebuilt : ∀ i, i < g.unionFind.parent.size → v1 i = v i := hagrees1
     split
-    · exact ⟨v1, hcv2⟩
-    · exact ih (rebuildF (applyRulesF fuel g rules) rebuildFuel) v1 hcv2 hpmi2 hshi2 hhcb2
+    · exact ⟨v1, hcv2, hagrees_rebuilt⟩
+    · obtain ⟨v', hcv', hagrees'⟩ :=
+        ih (rebuildF (applyRulesF fuel g rules) rebuildFuel) v1 hcv2 hpmi2 hshi2 hhcb2
+      exact ⟨v', hcv', fun i hi => by
+        have hsize_rebuilt : g.unionFind.parent.size ≤
+            (rebuildF (applyRulesF fuel g rules) rebuildFuel).unionFind.parent.size := by
+          rw [rebuildF_uf_size]; exact hsize1
+        exact (hagrees' i (Nat.lt_of_lt_of_le hi hsize_rebuilt)).trans (hagrees1 i hi)⟩
 
 -- ══════════════════════════════════════════════════════════════════
 -- Section 9: BestNodeInv preservation through saturation
@@ -759,7 +815,7 @@ theorem saturateF_preserves_quadruple (fuel maxIter rebuildFuel : Nat)
   | zero => exact ⟨v, hcv, hpmi, hshi, hhcb⟩
   | succ n ih =>
     simp only [saturateF]
-    obtain ⟨v1, hcv1, hpmi1, hshi1, hhcb1⟩ :=
+    obtain ⟨v1, hcv1, hpmi1, hshi1, hhcb1, _, _⟩ :=
       applyRulesF_preserves_cv fuel env rules h_rules g v hcv hpmi hshi hhcb
     have ⟨hcv2, hpmi2, hshi2, hhcb2⟩ :=
       rebuildF_preserves_cv env rebuildFuel (applyRulesF fuel g rules) v1 hcv1 hpmi1 hshi1 hhcb1

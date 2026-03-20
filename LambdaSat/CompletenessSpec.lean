@@ -96,7 +96,12 @@ private theorem foldl_sum_ge_mem (g : EGraph Op) (children : List EClassId)
 
 /-- **BestCostLowerBound with positive cost function implies acyclic DAG.**
     Uses bestCostOf as the ranking function: if bestCost(parent) ≥ costFn(nd) + Σ children
-    and costFn ≥ 1, then bestCost(parent) > bestCost(child). -/
+    and costFn ≥ 1, then bestCost(parent) > bestCost(child).
+
+    **Important**: `hcost_pos` requires `costFn` to be strictly positive for ALL nodes.
+    If `costFn` returns 0 for any node (e.g., zero-cost constants), the acyclicity
+    guarantee breaks and extraction may loop. Users must ensure `costFn n ≥ 1`
+    for every node `n`. A typical choice: `costFn := fun _ => 1` (uniform cost). -/
 theorem bestCostLowerBound_acyclic (g : EGraph Op) (costFn : ENode Op → Nat)
     (hlb : BestCostLowerBound g costFn)
     (hcost_pos : ∀ (nd : ENode Op), 0 < costFn nd) :
@@ -354,37 +359,46 @@ private theorem mapOption_some_of_forall {f : α → Option β} {l : List α}
     exact ⟨b :: bs, by simp [mapOption, hb, hbs]⟩
 
 /-- **Fuel sufficiency**: if the bestNode DAG is acyclic (via rank function),
-    every class has bestNode set, and reconstruct always succeeds,
-    then extractF returns `some` when fuel > rank(id).
+    every in-range class has bestNode set, and reconstruct always succeeds,
+    then extractF returns `some` when fuel > rank(id) and id is in range.
+
+    v1.6.0: hypotheses `hclass` and conclusion now bounded by `parent.size`,
+    fixing the unsatisfiable universal quantifier found by adversarial audit.
+    Added `hchild_bnd` to thread boundedness through the strong induction.
 
     Proof by strong induction on `rank id`:
-    - Unfold extractF: lookup class (succeeds by hset), get bestNode (succeeds by hset),
+    - Unfold extractF: lookup class (succeeds by hclass + hbnd), get bestNode (succeeds by hset),
       recurse on children with fuel-1 (succeeds by ih since rank child < rank parent
-      from hrank, and fuel-1 > rank child since fuel > rank parent). -/
+      from hrank, child in range from hchild_bnd, and fuel-1 > rank child since fuel > rank parent). -/
 theorem extractF_of_rank (g : EGraph Op)
     (rank : EClassId → Nat)
     (hrank : ∀ parentId childId, BestNodeChild g parentId childId →
       rank childId < rank parentId)
     (hset : ∀ cid cls, g.classes.get? (root g.unionFind cid) = some cls →
       ∃ nd, cls.bestNode = some nd)
-    (hclass : ∀ cid, ∃ cls, g.classes.get? (root g.unionFind cid) = some cls)
+    (hclass : ∀ cid, cid < g.unionFind.parent.size →
+      ∃ cls, g.classes.get? (root g.unionFind cid) = some cls)
+    (hchild_bnd : ∀ parentId childId, BestNodeChild g parentId childId →
+      parentId < g.unionFind.parent.size → childId < g.unionFind.parent.size)
     (hrecon : ∀ (nd : ENode Op) (childExprs : List Expr),
       (Extractable.reconstruct nd.op childExprs).isSome = true)
-    : ∀ (id : EClassId) (fuel : Nat), fuel > rank id →
+    : ∀ (id : EClassId) (fuel : Nat), id < g.unionFind.parent.size →
+      fuel > rank id →
       (extractF (Expr := Expr) g id fuel).isSome = true := by
-  -- Suffices to prove: ∀ n id, rank id = n → fuel > n → extractF succeeds
+  -- Suffices to prove: ∀ n id, rank id = n → id bounded → fuel > n → extractF succeeds
   -- by strong induction on n
-  suffices h : ∀ n, ∀ id, rank id = n → ∀ fuel, fuel > n →
+  suffices h : ∀ n, ∀ id, rank id = n → id < g.unionFind.parent.size →
+      ∀ fuel, fuel > n →
       (extractF (Expr := Expr) g id fuel).isSome = true by
-    intro id fuel hfuel; exact h (rank id) id rfl fuel hfuel
+    intro id fuel hbnd hfuel; exact h (rank id) id rfl hbnd fuel hfuel
   intro n
   induction n using Nat.strongRecOn with
   | ind n ih =>
-    intro id hrn fuel hfuel
+    intro id hrn hbnd fuel hfuel
     match fuel, hfuel with
     | fuel + 1, hfuel =>
       -- Unfold extractF and resolve class/bestNode lookups
-      obtain ⟨cls, hcls⟩ := hclass id
+      obtain ⟨cls, hcls⟩ := hclass id hbnd
       obtain ⟨nd, hnd⟩ := hset id cls hcls
       -- Show mapOption succeeds on children via ih
       have hmop : ∃ bs, mapOption (fun c => extractF (Expr := Expr) g c fuel)
@@ -392,9 +406,10 @@ theorem extractF_of_rank (g : EGraph Op)
         apply mapOption_some_of_forall
         intro c hc
         have hbnc : BestNodeChild g id c := ⟨cls, nd, hcls, hnd, hc⟩
+        have hc_bnd : c < g.unionFind.parent.size := hchild_bnd id c hbnc hbnd
         have hrc : rank c < n := by rw [← hrn]; exact hrank id c hbnc
         have hfc : fuel > rank c := by omega
-        have := ih (rank c) hrc c rfl fuel hfc
+        have := ih (rank c) hrc c rfl hc_bnd fuel hfc
         obtain ⟨v, hv⟩ := Option.isSome_iff_exists.mp this
         exact ⟨v, hv⟩
       obtain ⟨bs, hbs⟩ := hmop
@@ -402,24 +417,31 @@ theorem extractF_of_rank (g : EGraph Op)
       exact hrecon nd bs
 
 /-- **extractAuto completeness**: if the bestNode DAG is acyclic with rank bounded
-    by `numClasses`, all classes have bestNode set, and reconstruct always succeeds,
-    then `extractAuto` returns `some`.
+    by `numClasses` for in-range IDs, all in-range classes have bestNode set, and
+    reconstruct always succeeds, then `extractAuto` returns `some`.
+
+    v1.6.0: all quantifiers now bounded by `parent.size`, fixing the unsatisfiable
+    hypothesis found by adversarial audit. Added `hchild_bnd` and `hroot_bnd`.
 
     This closes gap G2 (fuel sufficiency). -/
 theorem extractAuto_complete (g : EGraph Op)
     (rank : EClassId → Nat)
     (hrank : ∀ parentId childId, BestNodeChild g parentId childId →
       rank childId < rank parentId)
-    (hbound : ∀ id, rank id < g.numClasses)
+    (hbound : ∀ id, id < g.unionFind.parent.size → rank id < g.numClasses)
     (hset : ∀ cid cls, g.classes.get? (root g.unionFind cid) = some cls →
       ∃ nd, cls.bestNode = some nd)
-    (hclass : ∀ cid, ∃ cls, g.classes.get? (root g.unionFind cid) = some cls)
+    (hclass : ∀ cid, cid < g.unionFind.parent.size →
+      ∃ cls, g.classes.get? (root g.unionFind cid) = some cls)
+    (hchild_bnd : ∀ parentId childId, BestNodeChild g parentId childId →
+      parentId < g.unionFind.parent.size → childId < g.unionFind.parent.size)
     (hrecon : ∀ (nd : ENode Op) (childExprs : List Expr),
       (Extractable.reconstruct nd.op childExprs).isSome = true)
-    (rootId : EClassId) :
+    (rootId : EClassId)
+    (hroot_bnd : rootId < g.unionFind.parent.size) :
     (extractAuto (Expr := Expr) g rootId).isSome = true := by
   unfold extractAuto
-  exact extractF_of_rank g rank hrank hset hclass hrecon rootId
-    (g.numClasses + 1) (by have := hbound rootId; omega)
+  exact extractF_of_rank g rank hrank hset hclass hchild_bnd hrecon rootId
+    (g.numClasses + 1) hroot_bnd (by have := hbound rootId hroot_bnd; omega)
 
 end LambdaSat

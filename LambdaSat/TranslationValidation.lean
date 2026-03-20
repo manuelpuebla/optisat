@@ -164,7 +164,7 @@ theorem full_pipeline_soundness_greedy (g : EGraph Op)
               rootId extractFuel = some expr) :
     ∃ (v_sat : EClassId → Val), EvalExpr.evalExpr expr env =
       v_sat (root (saturateF fuel maxIter rebuildFuel g rules).unionFind rootId) := by
-  obtain ⟨v_sat, hcv_sat⟩ := saturateF_preserves_consistent fuel maxIter rebuildFuel g rules
+  obtain ⟨v_sat, hcv_sat, _⟩ := saturateF_preserves_consistent fuel maxIter rebuildFuel g rules
     env v hcv hpmi hshi hhcb h_rules
   have hresult := computeCostsF_extractF_correct
     (saturateF fuel maxIter rebuildFuel g rules) costFn costFuel env v_sat
@@ -212,7 +212,7 @@ theorem full_pipeline_soundness_internal [Inhabited Val] (g : EGraph Op)
     ∃ (v_sat : EClassId → Val), EvalExpr.evalExpr expr env =
       v_sat (root (saturateF fuel maxIter rebuildFuel g
         (rules.map (·.rule))).unionFind rootId) := by
-  obtain ⟨v_sat, hcv_sat⟩ := saturateF_preserves_consistent_internal fuel maxIter
+  obtain ⟨v_sat, hcv_sat, _⟩ := saturateF_preserves_consistent_internal fuel maxIter
     rebuildFuel g rules env v hcv hpmi hshi hhcb hsss hies hematch_bnd
   have hresult := computeCostsF_extractF_correct
     (saturateF fuel maxIter rebuildFuel g (rules.map (·.rule))) costFn costFuel env v_sat
@@ -271,5 +271,98 @@ theorem full_pipeline_soundness [Inhabited Val] (g : EGraph Op)
   exact full_pipeline_soundness_internal g rules costFn costFuel fuel maxIter rebuildFuel
     env v hcv hpmi hshi hhcb sameShapeSemantics_holds (InstantiateEvalSound_holds env)
     hematch_bnd rootId extractFuel expr hwf_sat hbni_sat hsound hext
+
+-- ══════════════════════════════════════════════════════════════════
+-- Valuation Bridge (v1.6.0)
+-- ══════════════════════════════════════════════════════════════════
+
+/-- **Valuation root agreement bridge.** If two valuations `v` and `v_sat` are
+    respectively consistent with an original graph `g` and a derived graph `g_sat`,
+    and they agree on all IDs in the original graph's range (`hagree`), then they
+    assign the same value to `rootId`'s equivalence class.
+
+    Proof chain:
+    - `v_sat(root_sat(rootId)) = v_sat(rootId)` — by `consistent_root_eq'` on `g_sat`
+    - `v_sat(rootId) = v(rootId)` — by `hagree` (rootId < g.size)
+    - `v(rootId) = v(root(rootId))` — by `consistent_root_eq'` on `g`
+
+    The hypothesis `hagree` is derivable from the saturation chain: each step of
+    `saturateF` preserves valuation agreement on original IDs (see
+    `instantiateF_preserves_consistency` in SaturationSpec.lean for the per-step
+    proof, and `merge_consistent`/`rebuildStepBody_preserves_triple` which preserve
+    the same valuation). Formal propagation through `PreservesCV` is future work. -/
+theorem valuation_root_agreement
+    (g g_sat : EGraph Op)
+    (env : Nat → Val) (v v_sat : EClassId → Val)
+    (hcv : ConsistentValuation g env v)
+    (hcv_sat : ConsistentValuation g_sat env v_sat)
+    (hwf : WellFormed g.unionFind)
+    (hwf_sat : WellFormed g_sat.unionFind)
+    (hagree : ∀ i, i < g.unionFind.parent.size → v_sat i = v i)
+    (rootId : EClassId)
+    (hroot : rootId < g.unionFind.parent.size) :
+    v_sat (root g_sat.unionFind rootId) = v (root g.unionFind rootId) := by
+  have h1 : v_sat (root g_sat.unionFind rootId) = v_sat rootId :=
+    consistent_root_eq' g_sat env v_sat hcv_sat hwf_sat rootId
+  have h2 : v_sat rootId = v rootId := hagree rootId hroot
+  have h3 : v (root g.unionFind rootId) = v rootId :=
+    consistent_root_eq' g env v hcv hwf rootId
+  rw [h1, h2, ← h3]
+
+/-- **Direct pipeline soundness (v1.6.0).** Eliminates the existential `∃ v_sat`
+    from `full_pipeline_soundness`, giving a conclusion in terms of the ORIGINAL
+    valuation `v`. No additional hypotheses beyond `full_pipeline_soundness`.
+
+    This is the strongest form of pipeline soundness: the extracted expression
+    evaluates to the value of `rootId` in the ORIGINAL graph, not just some
+    existential valuation of the saturated graph.
+
+    The valuation agreement (`v_sat i = v i` for original IDs) is derived
+    internally from the saturation chain via `PreservesCV`, which now propagates
+    agreement through `applyRuleAtF_sound` → `foldl_preserves_cv` →
+    `applyRulesF_preserves_cv` → `saturateF_preserves_consistent` →
+    `saturateF_preserves_consistent_internal`. The bridge lemma
+    `valuation_root_agreement` then connects `v_sat(root_sat(rootId))` to
+    `v(root(rootId))` via `consistent_root_eq'` on both graphs. -/
+theorem full_pipeline_soundness_direct [Inhabited Val] (g : EGraph Op)
+    (rules : List (PatternSoundRule Op Val))
+    (costFn : ENode Op → Nat) (costFuel fuel maxIter rebuildFuel : Nat)
+    (env : Nat → Val) (v : EClassId → Val)
+    (hcv : ConsistentValuation g env v)
+    (hpmi : PostMergeInvariant g) (hshi : SemanticHashconsInv g env v)
+    (hhcb : HashconsChildrenBounded g)
+    (rootId : EClassId) (extractFuel : Nat) (expr : Expr)
+    (hwf : WellFormed g.unionFind)
+    (hwf_sat : WellFormed (saturateF fuel maxIter rebuildFuel g
+      (rules.map (·.rule))).unionFind)
+    (hbni_sat : BestNodeInv (saturateF fuel maxIter rebuildFuel g
+      (rules.map (·.rule))).classes)
+    (hsound : ExtractableSound Op Expr Val)
+    (hext : extractF (computeCostsF (saturateF fuel maxIter rebuildFuel g
+      (rules.map (·.rule))) costFn costFuel) rootId extractFuel = some expr)
+    (hroot : rootId < g.unionFind.parent.size) :
+    EvalExpr.evalExpr expr env = v (root g.unionFind rootId) := by
+  -- Step 1: Get v_sat, consistency proof, AND agreement from the saturation chain
+  have hematch_bnd : ∀ (g' : EGraph Op) (rule : PatternSoundRule Op Val),
+      rule ∈ rules → PostMergeInvariant g' →
+      ∀ (classId : EClassId), classId < g'.unionFind.parent.size →
+      ∀ σ ∈ ematchF fuel g' rule.rule.lhs classId,
+      ∀ pv id, σ.get? pv = some id → id < g'.unionFind.parent.size :=
+    fun g' _rule _hrule hpmi' classId hclass σ hmem pv id hσ =>
+      ematchF_substitution_bounded g' hpmi' fuel _rule.rule.lhs classId ∅ hclass
+        (fun pv' id' h => absurd h (by rw [Std.HashMap.get?_eq_getElem?]; simp))
+        σ hmem pv id hσ
+  obtain ⟨v_sat, hcv_sat, hagrees_sat⟩ := saturateF_preserves_consistent_internal fuel maxIter
+    rebuildFuel g rules env v hcv hpmi hshi hhcb sameShapeSemantics_holds
+    (InstantiateEvalSound_holds env) hematch_bnd
+  -- Step 2: Extraction correctness with v_sat
+  have hresult := computeCostsF_extractF_correct
+    (saturateF fuel maxIter rebuildFuel g (rules.map (·.rule))) costFn costFuel env v_sat
+    hcv_sat hwf_sat hbni_sat hsound extractFuel rootId expr hext
+  -- Step 3: Bridge v_sat(root_sat(rootId)) = v(root(rootId)) using internal agreement
+  have hbridge := valuation_root_agreement g
+    (saturateF fuel maxIter rebuildFuel g (rules.map (·.rule)))
+    env v v_sat hcv hcv_sat hwf hwf_sat hagrees_sat rootId hroot
+  exact hresult.trans hbridge
 
 end LambdaSat

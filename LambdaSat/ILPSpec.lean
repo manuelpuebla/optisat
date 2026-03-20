@@ -234,6 +234,13 @@ theorem validSolution_decompose (g : EGraph Op) (rootId : EClassId)
 
     Then: `EvalExpr.evalExpr expr env = v (root g.unionFind classId)`
 
+    Note (v1.6.0): `hvalid` is not used in the **soundness** proof — correctness of
+    each extracted node follows from `ConsistentValuation` alone, regardless of which
+    node the ILP solution selects. `ValidSolution` is needed for **completeness** (fuel
+    sufficiency): it ensures selected node indices are in bounds and the extraction tree
+    is acyclic, guaranteeing `extractILP` returns `some` with sufficient fuel. See
+    `extractILP_fuel_mono` for the fuel monotonicity property.
+
     Proof strategy (mirrors extractF_correct):
     - Induction on fuel
     - extractILP success → selected node index valid → node ∈ class.nodes
@@ -244,7 +251,7 @@ theorem extractILP_correct (g : EGraph Op) (rootId : EClassId)
     (sol : ILPSolution) (env : Nat → Val) (v : EClassId → Val)
     (hcv : ConsistentValuation g env v)
     (hwf : WellFormed g.unionFind)
-    (_hvalid : ValidSolution g rootId sol)
+    (hvalid : ValidSolution g rootId sol)
     (hsound : ExtractableSound Op Expr Val) :
     ∀ (fuel : Nat) (classId : EClassId) (expr : Expr),
       extractILP g sol classId fuel = some expr →

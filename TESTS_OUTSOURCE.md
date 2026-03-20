@@ -47,7 +47,7 @@ lake env lean Tests/Integration/*.lean
 
 ## Especificaciones por nodo
 
-### F1S2 — UnionFind
+### N26 — UnionFind
 
 - **Tipo**: FUNDACIONAL
 - **Archivos fuente**: `LambdaSat/UnionFind.lean`
@@ -103,7 +103,7 @@ INTEGRATION:
 
 ---
 
-### F1S3 — Core (EGraph)
+### N3 — Core (EGraph)
 
 - **Tipo**: FUNDACIONAL
 - **Archivos fuente**: `LambdaSat/Core.lean`
@@ -154,7 +154,7 @@ INTEGRATION:
 
 ---
 
-### F2S1 — CoreSpec (EGraphWF)
+### N4 — CoreSpec (EGraphWF)
 
 - **Tipo**: CRITICO
 - **Archivos fuente**: `LambdaSat/CoreSpec.lean`
@@ -188,7 +188,7 @@ INTEGRATION:
 
 ---
 
-### F2S2 — EMatch
+### N6 — EMatch
 
 - **Tipo**: PARALELO
 - **Archivos fuente**: `LambdaSat/EMatch.lean`, `LambdaSat/EMatchSpec.lean`
@@ -234,7 +234,7 @@ INTEGRATION:
 
 ---
 
-### F2S3 — Saturate
+### N20 — Saturate
 
 - **Tipo**: HOJA
 - **Archivos fuente**: `LambdaSat/Saturate.lean`, `LambdaSat/SaturationSpec.lean`
@@ -280,7 +280,7 @@ INTEGRATION:
 
 ---
 
-### F2S4 — SemanticSpec
+### N22 — SemanticSpec
 
 - **Tipo**: CRITICO
 - **Archivos fuente**: `LambdaSat/SemanticSpec.lean`
@@ -314,7 +314,7 @@ INTEGRATION:
 
 ---
 
-### F3S1 — Extractable + extractF
+### N9 — Extractable + extractF
 
 - **Tipo**: PARALELO
 - **Archivos fuente**: `LambdaSat/Extractable.lean`, `LambdaSat/ExtractSpec.lean`
@@ -360,7 +360,7 @@ INTEGRATION:
 
 ---
 
-### F3S4+F3S6+F9S* — ILP Pipeline
+### N11 — ILP Pipeline
 
 - **Tipo**: CRITICO (aggregate)
 - **Archivos fuente**: `LambdaSat/ILP.lean`, `LambdaSat/ILPEncode.lean`, `LambdaSat/ILPCheck.lean`, `LambdaSat/ILPSpec.lean`
@@ -477,7 +477,7 @@ INTEGRATION:
 
 ---
 
-### F3S3 — Optimize
+### N16 — Optimize
 
 - **Tipo**: PARALELO
 - **Archivos fuente**: `LambdaSat/Optimize.lean`
@@ -505,7 +505,7 @@ INTEGRATION:
 
 ---
 
-### F4S1+F4S2 — ParallelMatch + ParallelSaturate
+### N17 — ParallelMatch + ParallelSaturate
 
 - **Tipo**: HOJA (IO wrappers, outside formal TCB)
 - **Archivos fuente**: `LambdaSat/ParallelMatch.lean`, `LambdaSat/ParallelSaturate.lean`
@@ -536,7 +536,7 @@ INTEGRATION:
 
 ---
 
-### F4S3 — TranslationValidation
+### N24 — TranslationValidation
 
 - **Tipo**: HOJA
 - **Archivos fuente**: `LambdaSat/TranslationValidation.lean`
@@ -565,7 +565,7 @@ verified by the Lean type-checker at compile time.)
 
 ---
 
-### F8S1+F8S2+F8S3 — Discharge Hypotheses
+### N19 — PipelineSoundness (Discharge Hypotheses)
 
 - **Tipo**: FUNDACIONAL/CRITICO
 - **Archivos fuente**: `LambdaSat/EMatchSpec.lean`, `LambdaSat/AddNodeTriple.lean`
@@ -598,7 +598,7 @@ INTEGRATION:
 
 ---
 
-### F3S5 — ILPSolver
+### N14 — ILPSolver
 
 - **Tipo**: HOJA (outside TCB)
 - **Archivos fuente**: `LambdaSat/ILPSolver.lean`
@@ -624,14 +624,532 @@ INTEGRATION:
 
 ---
 
+### N1 — NatOpt (Utility)
+
+- **Tipo**: FUNDACIONAL
+- **Archivos fuente**: `LambdaSat/Util/NatOpt.lean`
+- **Target integration**: `Tests/Integration/NatOpt.lean`
+- **Note**: Pure theorem file — no defs to test with properties. Bridge + integration only.
+
+INTEGRATION:
+- [T1] P0, INVARIANT: min_comm — NatOpt.min a b = NatOpt.min b a for concrete values
+  Setup: Test with (some 3, some 5), (some 0, none), (none, some 7), (none, none)
+  Check: min is commutative for all cases
+
+- [T2] P0, INVARIANT: min_assoc — NatOpt.min (NatOpt.min a b) c = NatOpt.min a (NatOpt.min b c)
+  Setup: Test with (some 1, some 2, some 3), (none, some 2, some 3)
+  Check: associativity holds
+
+- [T3] P0, INVARIANT: min_self — NatOpt.min a a = a
+  Setup: Test some 5, none
+  Check: idempotent
+
+- [T4] P1, INVARIANT: add_le_add — monotonicity of NatOpt.add
+  Setup: Test concrete pairs where a ≤ b and c ≤ d
+  Check: NatOpt.add a c ≤ NatOpt.add b d
+
+- [T5] P1, INVARIANT: min_add_right — distribution of min over add
+  Setup: Test (some 2, some 5, some 3)
+  Check: min (add a c) (add b c) = add (min a b) c
+
+---
+
+### N2 — AddNodeTriple
+
+- **Tipo**: FUNDACIONAL
+- **Archivos fuente**: `LambdaSat/AddNodeTriple.lean`
+- **Target integration**: `Tests/Integration/AddNodeTriple.lean`
+- **Note**: Pure theorem file (add_node_triple, merge_preserves_hcb, empty_hcb). Bridge-only.
+
+BRIDGE-ONLY:
+- #check @add_node_triple
+- #check @merge_preserves_hcb
+- #check @empty_hcb
+
+---
+
+### N5 — DPTableLemmas
+
+- **Tipo**: FUNDACIONAL
+- **Archivos fuente**: `LambdaSat/DPTableLemmas.lean`
+- **Target integration**: `Tests/Integration/DPTableLemmas.lean`
+- **Note**: Heavy theorem file. Key testable theorems via concrete witnesses.
+
+INTEGRATION:
+- [T1] P0, INVARIANT: canonicalize_idempotent — canonicalizing twice = canonicalizing once
+  Setup: Create a BagAssignment, canonicalize it, canonicalize the result
+  Check: second canonicalization is identity
+
+- [T2] P0, INVARIANT: insertMin_get_self — inserted key retrieves inserted value
+  Setup: DPTable.empty, insertMin with key k and value v
+  Check: get? k returns some v' where v' ≤ v
+
+- [T3] P0, INVARIANT: insertMin_get_ne — insertMin doesn't change unrelated keys
+  Setup: DPTable with key k1, insertMin with key k2 ≠ k1
+  Check: get? k1 unchanged
+
+- [T4] P1, INVARIANT: dpTable_fold_eq_list — DPTable built via fold = via list
+  Setup: Build DPTable from a small list of entries
+  Check: fold-built table matches list-built table
+
+BRIDGE-ONLY:
+- #check @dp_optimal_of_validNTD
+- #check @dpLeaf_DPCompleteInv
+- #check @dpForget_DPCompleteInv
+- #check @dpIntroduce_DPCompleteInv
+- #check @dpJoin_DPCompleteInv
+- #check @runDP_DPCompleteInv
+- #check @ValidNTD
+
+---
+
+### N7 — EMatchSpec
+
+- **Tipo**: FUNDACIONAL
+- **Archivos fuente**: `LambdaSat/EMatchSpec.lean`
+- **Target integration**: `Tests/Integration/EMatchSpec.lean`
+- **Note**: Complex spec file. Key soundness theorems only testable via Bridge.
+
+BRIDGE-ONLY:
+- #check @ematchF_sound
+- #check @ematchF_sound_strong
+- #check @matchChildren_sound
+- #check @applyRuleAtF_sound
+- #check @saturateF_preserves_consistent_internal
+- #check @Pattern.eval
+- #check @Pattern.eval_ext
+- #check @InstantiateEvalSound_holds
+- #check @ematchF_substitution_bounded
+
+---
+
+### N8 — ExtractSpec
+
+- **Tipo**: FUNDACIONAL
+- **Archivos fuente**: `LambdaSat/ExtractSpec.lean`
+- **Target integration**: N/A (already covered by Bridge)
+- **Note**: 3 theorems, all in existing Bridge. No additional tests needed.
+
+BRIDGE-ONLY:
+- #check @extractF_correct (already in Bridge)
+- #check @extractAuto_correct (already in Bridge)
+- #check @computeCostsF_extractF_correct (already in Bridge)
+
+---
+
+### N10 — Extraction
+
+- **Tipo**: FUNDACIONAL
+- **Archivos fuente**: `LambdaSat/Extraction.lean`
+- **Target integration**: `Tests/Integration/Extraction.lean`
+
+INTEGRATION:
+- [T1] P0, INVARIANT: extract with Greedy strategy produces correct expression
+  Setup: Build EGraph with add(const 5, const 3), extract using ExtractionStrategy.greedy
+  Check: result matches expected expression
+
+- [T2] P0, INVARIANT: extract with ILP strategy matches extractILP
+  Setup: Build EGraph, provide valid ILPSolution, extract using ExtractionStrategy.ilp
+  Check: result matches direct extractILP call
+
+- [T3] P1, INVARIANT: ExtractionStrategy.greedy is always StrategyValid
+  Setup: Build any EGraph with computeCosts
+  Check: StrategyValid holds for greedy strategy
+
+BRIDGE-ONLY:
+- #check @extract_correct
+- #check @ExtractionStrategy
+- #check @StrategyValid
+
+---
+
+### N12 — ILPCheck
+
+- **Tipo**: FUNDACIONAL
+- **Archivos fuente**: `LambdaSat/ILPCheck.lean`
+- **Target integration**: `Tests/Integration/ILPCheck.lean`
+
+INTEGRATION:
+- [T1] P0, INVARIANT: checkRootActive accepts active root
+  Setup: Solution with root activated
+  Check: checkRootActive returns true
+
+- [T2] P0, INVARIANT: checkRootActive rejects inactive root
+  Setup: Solution with root deactivated
+  Check: checkRootActive returns false
+
+- [T3] P0, INVARIANT: checkExactlyOne accepts valid single selection
+  Setup: Class with 3 nodes, solution selects node 0
+  Check: checkExactlyOne returns true
+
+- [T4] P0, INVARIANT: checkExactlyOne rejects no selection
+  Setup: Active class with no selectedNodes entry
+  Check: checkExactlyOne returns false
+
+- [T5] P0, INVARIANT: checkChildDeps ensures children are active
+  Setup: Parent node with 2 children, all activated
+  Check: checkChildDeps returns true
+
+- [T6] P0, INVARIANT: checkChildDeps rejects missing child activation
+  Setup: Parent active but one child missing
+  Check: checkChildDeps returns false
+
+- [T7] P0, INVARIANT: checkAcyclicity rejects level violation
+  Setup: Parent level = 0, child level = 5
+  Check: checkAcyclicity returns false
+
+- [T8] P1, INVARIANT: solutionCost_nonneg — cost is always ≥ 0
+  Setup: Any valid solution with positive cost function
+  Check: solutionCost ≥ 0
+
+---
+
+### N13 — ILPEncode
+
+- **Tipo**: FUNDACIONAL
+- **Archivos fuente**: `LambdaSat/ILPEncode.lean`
+- **Target integration**: `Tests/Integration/ILPEncode.lean`
+
+INTEGRATION:
+- [T1] P0, INVARIANT: encodeEGraph produces constraints
+  Setup: EGraph with 3 classes
+  Check: prob.constraints.size > 0
+
+- [T2] P0, INVARIANT: encodeEGraph_rootClassId matches canonical root
+  Setup: EGraph with known root
+  Check: prob.rootClassId == root g.unionFind rootId
+
+- [T3] P0, INVARIANT: encodeEGraph_numClasses matches graph
+  Setup: EGraph with 3 classes
+  Check: prob.numClasses == g.classes.size
+
+- [T4] P1, INVARIANT: ILPSolution.isFeasible accepts valid assignment
+  Setup: Encode EGraph, manually build feasible variable assignment
+  Check: isFeasible returns true
+
+- [T5] P1, INVARIANT: ILPProblem.stats returns correct counts
+  Setup: Encode EGraph
+  Check: stats.numVars > 0, stats.numConstraints == constraints.size
+
+BRIDGE-ONLY:
+- #check @encodeEGraph_rootClassId
+- #check @encodeEGraph_numClasses
+- #check @isFeasible_sound
+- #check @checkBounds_sound
+
+---
+
+### N15 — ILPSpec
+
+- **Tipo**: FUNDACIONAL
+- **Archivos fuente**: `LambdaSat/ILPSpec.lean`
+- **Target integration**: N/A (pure spec — covered by Bridge)
+- **Note**: All 11 declarations are theorems. Bridge verification only.
+
+BRIDGE-ONLY:
+- #check @extractILP_correct (already in Bridge)
+- #check @ilp_extraction_soundness
+- #check @checkRootActive_sound
+- #check @checkExactlyOne_sound
+- #check @checkChildDeps_sound
+- #check @checkAcyclicity_sound
+- #check @validSolution_decompose
+- #check @extractILP_fuel_mono
+- #check @ValidSolution
+
+---
+
+### N18 — ParallelSaturate
+
+- **Tipo**: HOJA
+- **Archivos fuente**: `LambdaSat/ParallelSaturate.lean`
+- **Target integration**: `Tests/Integration/ParallelSaturate.lean`
+
+INTEGRATION:
+- [T1] P0, INVARIANT: saturateWithMode Sequential equals regular saturate
+  Setup: EGraph with simple rules, SaturationMode.sequential
+  Check: result matches sequential saturation
+
+- [T2] P0, INVARIANT: ParallelSatConfig.toSequential produces valid config
+  Setup: ParallelSatConfig.large.toSequential
+  Check: result is valid SaturationConfig
+
+- [T3] P1, INVARIANT: SaturationMode variants construct
+  Setup: Create Sequential, Parallel, Adaptive modes
+  Check: all construct without error
+
+---
+
+### N21 — SaturationSpec
+
+- **Tipo**: FUNDACIONAL
+- **Archivos fuente**: `LambdaSat/SaturationSpec.lean`
+- **Target integration**: N/A (pure spec — covered by Bridge)
+- **Note**: Heavy spec file (23 declarations). Bridge verification for key theorems.
+
+BRIDGE-ONLY:
+- #check @saturateF_preserves_consistent (already in Bridge via saturateF_preserves_cv)
+- #check @rebuildF_preserves_cv (already in Bridge)
+- #check @saturateF_preserves_quadruple
+- #check @saturateF_preserves_bni
+- #check @instantiateF_preserves_addExprInv
+- #check @instantiateF_preserves_consistency
+- #check @applyRulesF_preserves_cv
+- #check @PreservesCV
+
+---
+
+### N23 — SoundRule
+
+- **Tipo**: HOJA
+- **Archivos fuente**: `LambdaSat/SoundRule.lean`
+- **Target integration**: `Tests/Integration/SoundRule.lean`
+
+INTEGRATION:
+- [T1] P0, INVARIANT: SoundRewriteRule.toConditional preserves structure
+  Setup: Create a simple SoundRewriteRule, convert to conditional
+  Check: conditional rule exists, IsSound holds
+
+- [T2] P0, INVARIANT: sound_rule_preserves_consistency via #check
+  Setup: N/A — bridge verification
+  Check: theorem type-checks
+
+BRIDGE-ONLY:
+- #check @SoundRewriteRule
+- #check @ConditionalSoundRewriteRule
+- #check @sound_rule_preserves_consistency
+- #check @conditional_sound_rule_preserves_consistency
+
+---
+
+### N25 — TreewidthDP
+
+- **Tipo**: FUNDACIONAL
+- **Archivos fuente**: `LambdaSat/TreewidthDP.lean`
+- **Target integration**: `Tests/Integration/TreewidthDP.lean`
+
+INTEGRATION:
+- [T1] P0, INVARIANT: DPTable.empty has size 0
+  Setup: DPTable.empty
+  Check: size == 0, get? any_key == none
+
+- [T2] P0, INVARIANT: DPTable.insertMin then get? returns inserted value
+  Setup: empty table, insertMin k v
+  Check: get? k == some v' with v' ≤ v
+
+- [T3] P0, INVARIANT: dpLeaf creates a single-entry table
+  Setup: dpLeaf on a simple EGraph class
+  Check: result table is non-empty
+
+- [T4] P0, INVARIANT: dpForget removes a variable from assignments
+  Setup: DPTable with 2-variable assignments, dpForget one variable
+  Check: resulting assignments have 1 less variable
+
+- [T5] P1, INVARIANT: dpOptimalCost returns minimum cost
+  Setup: DPTable with known entries
+  Check: dpOptimalCost ≤ all individual entry costs
+
+- [T6] P1, INVARIANT: runDP on leaf NiceTree
+  Setup: NiceTree.leaf with data for a single class
+  Check: runDP produces non-empty result
+
+BRIDGE-ONLY:
+- #check @dp_extraction_optimal
+- #check @DPCompleteInv
+- #check @DPOptimalityWitness
+- #check @dpOptimalityWitness_from_completeInv
+- #check @dpOptimalCost_le_entry
+
+---
+
+### N27 — FoldMin
+
+- **Tipo**: HOJA
+- **Archivos fuente**: `LambdaSat/Util/FoldMin.lean`
+- **Target integration**: N/A (pure theorem file — Bridge-only)
+
+BRIDGE-ONLY:
+- #check @foldl_min_le_init
+- #check @foldl_min_le_mem
+- #check @foldl_min_lower_bound
+- #check @foldl_min_attained
+- #check @foldl_min_mono
+
+---
+
+### N28 — InsertMin
+
+- **Tipo**: FUNDACIONAL
+- **Archivos fuente**: `LambdaSat/Util/InsertMin.lean`
+- **Target integration**: `Tests/Integration/InsertMin.lean`
+
+INTEGRATION:
+- [T1] P0, INVARIANT: insertMin on empty map creates entry
+  Setup: empty HashMap, insertMin k v
+  Check: result.get? k == some v
+
+- [T2] P0, INVARIANT: insertMin keeps minimum of old and new
+  Setup: HashMap with k → 10, insertMin k 5
+  Check: result.get? k == some 5
+
+- [T3] P0, INVARIANT: insertMin doesn't overwrite with larger value
+  Setup: HashMap with k → 3, insertMin k 7
+  Check: result.get? k == some 3
+
+- [T4] P1, INVARIANT: insertMin doesn't affect other keys
+  Setup: HashMap with k1 → v1, insertMin k2 v2
+  Check: result.get? k1 == some v1
+
+BRIDGE-ONLY:
+- #check @insertMin_get_ne
+- #check @insertMin_le_new
+- #check @insertMin_le_old
+- #check @insertMin_bound
+
+---
+
+### N29 — NiceTree
+
+- **Tipo**: FUNDACIONAL
+- **Archivos fuente**: `LambdaSat/Util/NiceTree.lean`
+- **Target integration**: `Tests/Integration/NiceTree.lean`
+
+INTEGRATION:
+- [T1] P0, INVARIANT: NiceTree.leaf has size 1
+  Setup: NiceTree.leaf with data
+  Check: size == 1, depth == 0
+
+- [T2] P0, INVARIANT: treeFold on leaf returns leaf function result
+  Setup: treeFold with fLeaf = id, NiceTree.leaf d
+  Check: result == fLeaf d
+
+- [T3] P1, INVARIANT: NiceTree.unary increases depth by 1
+  Setup: NiceTree.unary data (NiceTree.leaf data)
+  Check: depth == 1, size == 2
+
+- [T4] P1, INVARIANT: treeFold on binary combines children
+  Setup: binary tree, treeFold with known functions
+  Check: result matches manual computation
+
+BRIDGE-ONLY:
+- #check @treeFold_inv
+- #check @treeFold_inv_ext
+- #check @treeFold_pair_inv
+- #check @treeFold_lower_bound
+- #check @treeFold_mapData
+- #check @size_pos
+
+---
+
+### N30 — IntegrationTests (existing)
+
+- **Tipo**: FUNDACIONAL
+- **Archivos fuente**: `Tests/IntegrationTests.lean`
+- **Target integration**: N/A (this IS the existing integration test file)
+- **Note**: Contains 33 existing tests. No additional specs needed — already provides broad coverage.
+  The existing tests cover: greedy extraction, saturation, ILP, parallel saturation,
+  edge cases, hashcons, DP leaf/forget/optimal, canonicalize, strategy dispatching.
+  Execute directly: `lake env lean --run Tests/IntegrationTests.lean`
+
+---
+
+## Formal Bridge Requirements
+
+The testing session **MUST** create `Tests/Bridge.lean` that verifies
+formal theorems apply to the concrete test domain.
+
+### Theorems to instantiate (#check)
+
+| Theorem | Source | #check statement |
+|---------|--------|-----------------|
+| `extractF_correct` | `LambdaSat/ExtractSpec.lean` | `#check @extractF_correct` |
+| `extractAuto_correct` | `LambdaSat/ExtractSpec.lean` | `#check @extractAuto_correct` |
+| `computeCostsF_extractF_correct` | `LambdaSat/ExtractSpec.lean` | `#check @computeCostsF_extractF_correct` |
+| `extractILP_correct` | `LambdaSat/ILPSpec.lean` | `#check @extractILP_correct` |
+| `ilp_extraction_soundness` | `LambdaSat/ILPSpec.lean` | `#check @ilp_extraction_soundness` |
+| `checkRootActive_sound` | `LambdaSat/ILPSpec.lean` | `#check @checkRootActive_sound` |
+| `checkExactlyOne_sound` | `LambdaSat/ILPSpec.lean` | `#check @checkExactlyOne_sound` |
+| `checkChildDeps_sound` | `LambdaSat/ILPSpec.lean` | `#check @checkChildDeps_sound` |
+| `checkAcyclicity_sound` | `LambdaSat/ILPSpec.lean` | `#check @checkAcyclicity_sound` |
+| `validSolution_decompose` | `LambdaSat/ILPSpec.lean` | `#check @validSolution_decompose` |
+| `extractILP_fuel_mono` | `LambdaSat/ILPSpec.lean` | `#check @extractILP_fuel_mono` |
+| `full_pipeline_soundness` | `LambdaSat/PipelineSoundness.lean` | `#check @full_pipeline_soundness` |
+| `empty_consistent` | `LambdaSat/SemanticSpec.lean` | `#check @empty_consistent` |
+| `consistent_root_eq` | `LambdaSat/SemanticSpec.lean` | `#check @consistent_root_eq` |
+| `find_consistent` | `LambdaSat/SemanticSpec.lean` | `#check @find_consistent` |
+| `saturateF_preserves_consistent` | `LambdaSat/SaturationSpec.lean` | `#check @saturateF_preserves_consistent` |
+| `rebuildF_preserves_cv` | `LambdaSat/SaturationSpec.lean` | `#check @rebuildF_preserves_cv` |
+| `saturateF_preserves_quadruple` | `LambdaSat/SaturationSpec.lean` | `#check @saturateF_preserves_quadruple` |
+| `saturateF_preserves_bni` | `LambdaSat/SaturationSpec.lean` | `#check @saturateF_preserves_bni` |
+| `bestCostLowerBound_acyclic` | `LambdaSat/CompletenessSpec.lean` | `#check @bestCostLowerBound_acyclic` |
+| `add_node_triple` | `LambdaSat/AddNodeTriple.lean` | `#check @add_node_triple` |
+| `merge_preserves_hcb` | `LambdaSat/AddNodeTriple.lean` | `#check @merge_preserves_hcb` |
+| `empty_hcb` | `LambdaSat/AddNodeTriple.lean` | `#check @empty_hcb` |
+| `dp_optimal_of_validNTD` | `LambdaSat/DPTableLemmas.lean` | `#check @dp_optimal_of_validNTD` |
+| `ematchF_sound` | `LambdaSat/EMatchSpec.lean` | `#check @ematchF_sound` |
+| `applyRuleAtF_sound` | `LambdaSat/EMatchSpec.lean` | `#check @applyRuleAtF_sound` |
+| `extract_correct` | `LambdaSat/Extraction.lean` | `#check @extract_correct` |
+| `sound_rule_preserves_consistency` | `LambdaSat/SoundRule.lean` | `#check @sound_rule_preserves_consistency` |
+| `conditional_sound_rule_preserves_consistency` | `LambdaSat/SoundRule.lean` | `#check @conditional_sound_rule_preserves_consistency` |
+| `dp_extraction_optimal` | `LambdaSat/TreewidthDP.lean` | `#check @dp_extraction_optimal` |
+| `encodeEGraph_rootClassId` | `LambdaSat/ILPEncode.lean` | `#check @encodeEGraph_rootClassId` |
+| `isFeasible_sound` | `LambdaSat/ILPEncode.lean` | `#check @isFeasible_sound` |
+| `treeFold_inv` | `LambdaSat/Util/NiceTree.lean` | `#check @treeFold_inv` |
+| `treeFold_lower_bound` | `LambdaSat/Util/NiceTree.lean` | `#check @treeFold_lower_bound` |
+| `foldl_min_attained` | `LambdaSat/Util/FoldMin.lean` | `#check @foldl_min_attained` |
+| `foldl_min_mono` | `LambdaSat/Util/FoldMin.lean` | `#check @foldl_min_mono` |
+| `insertMin_le_new` | `LambdaSat/Util/InsertMin.lean` | `#check @insertMin_le_new` |
+| `insertMin_le_old` | `LambdaSat/Util/InsertMin.lean` | `#check @insertMin_le_old` |
+
+### Hypothesis types found
+
+- `ConsistentValuation` — verify this holds for the concrete test domain
+- `WellFormed` — verify this holds for the concrete test domain
+- `BestNodeInv` — verify this holds for the concrete test domain
+- `ExtractableSound` — verify this holds for the concrete test domain
+- `ValidSolution` — verify this holds for the concrete test domain
+- `ReplaceChildrenSound` — verify this holds for the concrete test domain
+- `PostMergeInvariant` — verify this holds for the concrete test domain
+- `SemanticHashconsInv` — verify this holds for the concrete test domain
+- `HashconsChildrenBounded` — verify this holds for the concrete test domain
+- `BestCostLowerBound` — verify this holds for the concrete test domain
+
+### Bridge.lean template
+
+```lean
+-- Tests/Bridge.lean — Formal coupling verification
+import LambdaSat
+
+-- Layer 1: Verify theorems apply to concrete domain
+#check @extractF_correct
+#check @extractAuto_correct
+#check @computeCostsF_extractF_correct
+#check @extractILP_correct
+#check @checkSolution_sound
+#check @full_pipeline_soundness
+#check @empty_consistent
+#check @consistent_root_eq
+#check @find_consistent
+#check @saturateF_preserves_cv
+#check @rebuildF_preserves_cv
+#check @bestCostLowerBound_acyclic
+
+-- Layer 2: Hypothesis witnesses (prove where feasible)
+-- theorem bridge_empty_consistent : ConsistentValuation ... := empty_consistent
+-- theorem bridge_wf_empty : WellFormed (EGraph.empty) := ...
+```
+
+---
+
 ## Resumen
 
 | Métrica | Total |
 |---------|-------|
-| Nodos cubiertos | 13 (agrupados de 33 DAG nodes) |
+| Nodos cubiertos | 30 (all DAG nodes) |
 | Properties | 32 (16 P0, 12 P1, 4 P2) |
-| Integration tests | 49 |
-| Archivos .lean a crear | ~15 (7 property + 8 integration) |
+| Integration tests | ~110 |
+| Bridge #check | 38 |
+| Archivos .lean a crear | ~25 (integration + bridge) |
 
 ### Estado de implementación (v1.2.0)
 
