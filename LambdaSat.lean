@@ -87,4 +87,8 @@ import LambdaSat.Instances.PropExpr
 import LambdaSat.Instances.PropRules
 import LambdaSat.MultiRelEGraph
 import LambdaSat.MultiRelSoundness
+-- v2.1 — CVec generalized relations + Multi-pattern matching + Self-improvement
+import LambdaSat.MultiPatternMatch
+import LambdaSat.MultiPatternMatchSpec
+import LambdaSat.Ruler.SelfImprovement
 import LambdaSat.Tests.V2Tests

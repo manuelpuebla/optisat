@@ -70,6 +70,36 @@ theorem empty_consistent_rel {Val : Type} (R : SemanticRelation Val) (v : EClass
   simp [DirectedRelGraph.hasDirectEdge, DirectedRelGraph.successors,
         DirectedRelGraph.empty] at h
 
+/-- Consistency via allEdges: every listed edge satisfies the relation.
+    This is a companion to `DirectedRelConsistency` (which uses `hasDirectEdge`).
+    Useful when the available evidence is `allEdges` membership. -/
+def DirectedRelConsistencyAllEdges {Val : Type} (drg : DirectedRelGraph)
+    (R : SemanticRelation Val) (v : EClassId → Val) : Prop :=
+  ∀ a b, (a, b) ∈ drg.allEdges → R (v a) (v b)
+
+/-- DirectedRelConsistency implies DirectedRelConsistencyAllEdges
+    (hasDirectEdge check is more restrictive than allEdges membership
+     in theory, but in practice they agree for well-formed graphs).
+    Note: the reverse direction requires HashMap bridge lemmas. -/
+theorem DRC_implies_DRC_allEdges {Val : Type} (drg : DirectedRelGraph)
+    (R : SemanticRelation Val) (v : EClassId → Val)
+    (hcon : DirectedRelConsistency drg R v)
+    (h_bridge : ∀ a b, (a, b) ∈ drg.allEdges → drg.hasDirectEdge a b) :
+    DirectedRelConsistencyAllEdges drg R v := by
+  intro a b hmem
+  exact hcon a b (h_bridge a b hmem)
+
+theorem DirectedRelConsistency_transfer {Val : Type} (drg : DirectedRelGraph)
+    (R : SemanticRelation Val) (v v' : EClassId → Val) (n : Nat)
+    (hcon : DirectedRelConsistency drg R v)
+    (hagree : ∀ i, i < n → v' i = v i)
+    (hbnd : ∀ a b, drg.hasDirectEdge a b → a < n ∧ b < n) :
+    DirectedRelConsistency drg R v' := by
+  intro a b hedge
+  have ⟨ha, hb⟩ := hbnd a b hedge
+  rw [hagree a ha, hagree b hb]
+  exact hcon a b hedge
+
 -- ══════════════════════════════════════════════════════════════════
 -- Section 3: addEdge preserves consistency
 -- ══════════════════════════════════════════════════════════════════

@@ -136,7 +136,7 @@ theorem optimizeWithStrategyF_soundness [Inhabited Val] (g : EGraph Op)
       ematchF_substitution_bounded g' hpmi' fuel _rule.rule.lhs classId ∅ hclass
         (fun pv' id' h => absurd h (by rw [Std.HashMap.get?_eq_getElem?]; simp))
         σ hmem pv id hσ
-  obtain ⟨v_sat, hcv_sat⟩ := saturateF_preserves_consistent_internal fuel maxIter
+  obtain ⟨v_sat, hcv_sat, _⟩ := saturateF_preserves_consistent_internal fuel maxIter
     rebuildFuel g rules env v hcv hpmi hshi hhcb sameShapeSemantics_holds
     (InstantiateEvalSound_holds env) hematch_bnd
   -- Step 2: Cost computation preserves consistency and well-formedness
@@ -166,7 +166,7 @@ theorem optimizeWithStrategyF_soundness [Inhabited Val] (g : EGraph Op)
 
 /-- Helper: PatternSoundRules imply PreservesCV for each rewrite rule.
     Factors the h_rules construction from saturateF_preserves_consistent_internal. -/
-private theorem patternSoundRules_preserveCV [Inhabited Val] (fuel : Nat) (env : Nat → Val)
+theorem patternSoundRules_preserveCV [Inhabited Val] (fuel : Nat) (env : Nat → Val)
     (rules : List (PatternSoundRule Op Val)) :
     ∀ rule ∈ rules.map (·.rule), PreservesCV env (applyRuleF fuel · rule) := by
   have hematch_bnd : ∀ (g' : EGraph Op) (rule : PatternSoundRule Op Val),
@@ -187,6 +187,7 @@ private theorem patternSoundRules_preserveCV [Inhabited Val] (fuel : Nat) (env :
     (∀ cid ∈ l, cid < g'.unionFind.parent.size) →
     ConsistentValuation acc env v_acc → PostMergeInvariant acc →
     SemanticHashconsInv acc env v_acc → HashconsChildrenBounded acc →
+    (∀ i, i < g'.unionFind.parent.size → v_acc i = v' i) →
     g'.unionFind.parent.size ≤ acc.unionFind.parent.size →
     ∃ v'', ConsistentValuation (l.foldl (fun acc classId =>
       applyRuleAtF fuel acc psrule.rule classId) acc) env v'' ∧
@@ -195,8 +196,11 @@ private theorem patternSoundRules_preserveCV [Inhabited Val] (fuel : Nat) (env :
       SemanticHashconsInv (l.foldl (fun acc classId =>
         applyRuleAtF fuel acc psrule.rule classId) acc) env v'' ∧
       HashconsChildrenBounded (l.foldl (fun acc classId =>
-        applyRuleAtF fuel acc psrule.rule classId) acc) by
-    obtain ⟨v'', hcv'', hpmi'', hshi'', hhcb''⟩ := h _ g' v'
+        applyRuleAtF fuel acc psrule.rule classId) acc) ∧
+      (∀ i, i < g'.unionFind.parent.size → v'' i = v' i) ∧
+      g'.unionFind.parent.size ≤ (l.foldl (fun acc classId =>
+        applyRuleAtF fuel acc psrule.rule classId) acc).unionFind.parent.size by
+    obtain ⟨v'', hcv'', hpmi'', hshi'', hhcb'', hagrees'', hsize''⟩ := h _ g' v'
       (fun cid hcid => by
         have ⟨a, hmem, ha_eq⟩ : ∃ a ∈ g'.classes.toList, a.1 = cid :=
           List.mem_map.mp hcid
@@ -204,24 +208,26 @@ private theorem patternSoundRules_preserveCV [Inhabited Val] (fuel : Nat) (env :
           rw [Std.HashMap.contains_eq_isSome_getElem?,
               Std.HashMap.mem_toList_iff_getElem?_eq_some.mp hmem]; rfl
         exact ha_eq ▸ hpmi'.classes_entries_valid a.fst hcont)
-      hcv' hpmi' hshi' hhcb' Nat.le.refl
-    exact ⟨v'', hcv'', hpmi'', hshi'', hhcb''⟩
+      hcv' hpmi' hshi' hhcb' (fun _ _ => rfl) Nat.le.refl
+    exact ⟨v'', hcv'', hpmi'', hshi'', hhcb'', hagrees'', hsize''⟩
   intro l
   induction l with
   | nil =>
-    intro acc v_acc _ hcv hpmi hshi hhcb _
-    exact ⟨v_acc, hcv, hpmi, hshi, hhcb⟩
+    intro acc v_acc _ hcv hpmi hshi hhcb hagrees hsize
+    exact ⟨v_acc, hcv, hpmi, hshi, hhcb, hagrees, hsize⟩
   | cons cid rest ih =>
-    intro acc v_acc hbnd hcv_acc hpmi_acc hshi_acc hhcb_acc hsize_acc
+    intro acc v_acc hbnd hcv_acc hpmi_acc hshi_acc hhcb_acc hagrees_acc hsize_acc
     simp only [List.foldl_cons]
     have hcid : cid < acc.unionFind.parent.size :=
       Nat.lt_of_lt_of_le (hbnd cid (.head _)) hsize_acc
-    obtain ⟨v'', hcv'', hpmi'', hshi'', hhcb'', hsize''⟩ :=
+    obtain ⟨v'', hcv'', hpmi'', hshi'', hhcb'', hsize'', hagrees''⟩ :=
       applyRuleAtF_sound fuel psrule cid env sameShapeSemantics_holds
         (InstantiateEvalSound_holds env) acc v_acc hcv_acc hpmi_acc
         hshi_acc hhcb_acc hcid (hematch_bnd acc psrule hps hpmi_acc cid hcid)
+    have hagrees_composed : ∀ i, i < g'.unionFind.parent.size → v'' i = v' i :=
+      fun i hi => (hagrees'' i (Nat.lt_of_lt_of_le hi hsize_acc)).trans (hagrees_acc i hi)
     exact ih _ v'' (fun c hc => hbnd c (.tail _ hc)) hcv'' hpmi'' hshi'' hhcb''
-      (Nat.le_trans hsize_acc hsize'')
+      hagrees_composed (Nat.le_trans hsize_acc hsize'')
 
 /-- **saturateF preserves WellFormed.** Derives WellFormed from PMI preservation
     through the saturation pipeline. Corollary of `saturateF_preserves_quadruple`. -/

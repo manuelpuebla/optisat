@@ -116,6 +116,13 @@ theorem MRCV_empty [Inhabited Val] (env : Nat → Val) :
   · intro i hi
     simp [MultiRelEGraph.empty] at hi
 
+/-- crossStep with empty relDags is identity (no merges to find). -/
+theorem crossStep_empty_relDags (cfg : TieredSatConfig)
+    (mreg : MultiRelEGraph Op)
+    (h : mreg.relDags = []) :
+    crossStep cfg mreg = mreg := by
+  simp only [crossStep, h, List.flatMap_nil, List.isEmpty_nil, ite_true]
+
 -- ══════════════════════════════════════════════════════════════════
 -- Section 5: Saturation Preservation
 -- ══════════════════════════════════════════════════════════════════
@@ -142,7 +149,11 @@ theorem saturateColoredF_preserves_MRCV
     (h_eq_step : ∀ (m : MultiRelEGraph Op) (v' : EClassId → Val),
       MultiRelConsistentValuation m assumptions rels env v' →
       ∃ v'', MultiRelConsistentValuation
-        (eqStep rules cfg.matchFuel cfg.rebuildFuel m) assumptions rels env v'') :
+        (eqStep rules cfg.matchFuel cfg.rebuildFuel m) assumptions rels env v'')
+    (h_cross_step : ∀ (m : MultiRelEGraph Op) (v' : EClassId → Val),
+      MultiRelConsistentValuation m assumptions rels env v' →
+      ∃ v'', MultiRelConsistentValuation
+        (crossStep cfg m) assumptions rels env v'') :
     ∃ (v' : EClassId → Val),
       MultiRelConsistentValuation (saturateColoredF rules cfg mreg) assumptions rels env v' := by
   -- Use iterateStep_preserves on the paired state (MultiRelEGraph Op × Nat).
@@ -155,12 +166,16 @@ theorem saturateColoredF_preserves_MRCV
   apply iterateStep_preserves
   · intro ⟨m, n⟩ ⟨v', hv'⟩
     show ∃ v', MultiRelConsistentValuation (tieredStep rules cfg n m) assumptions rels env v'
-    -- tieredStep conditionally applies eqStep (modifies baseGraph only),
-    -- relStep (identity), crossStep (identity).
-    simp only [tieredStep, relStep, crossStep]
+    -- tieredStep conditionally applies eqStep, relStep (identity), crossStep.
+    simp only [tieredStep, relStep]
     split <;> split <;> split
-    -- Cases where eqStep is NOT applied: graph unchanged, witness reused.
-    all_goals (first | exact ⟨v', hv'⟩ | exact h_eq_step m v' hv')
+    -- 8 cases from 3 conditionals (eqStep, relStep, crossStep)
+    -- Each case: either graph unchanged (reuse witness) or step applied (use hypothesis)
+    all_goals first
+      | exact ⟨v', hv'⟩
+      | exact h_cross_step _ v' hv'
+      | exact h_eq_step m v' hv'
+      | (obtain ⟨v'', hv''⟩ := h_eq_step m v' hv'; exact h_cross_step _ v'' hv'')
   · exact ⟨v, hmrcv⟩
 
 -- ══════════════════════════════════════════════════════════════════

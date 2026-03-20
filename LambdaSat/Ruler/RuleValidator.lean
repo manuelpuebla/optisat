@@ -1,11 +1,14 @@
 /-
   LambdaSat — Ruler/RuleValidator: Candidate Rule Validation
   Fase 20 Subfase 4: Validate candidate pairs as sound rewrite rules.
+  Fase 14 (v2.1): Support for relation rule validation.
 
   After CVec matching produces candidate pairs (patterns that agree on
-  test inputs), this module attempts to validate them as genuine equalities.
+  test inputs), this module attempts to validate them as genuine equalities
+  or relations (≤, ∣, mod, conditional).
+
   Validation can be:
-  - Formal proof (produces a `SoundRewriteRule`)
+  - Formal proof (produces a `SoundRewriteRule` or `ValidatedRelationRule`)
   - Counterexample (disproves the candidate)
   - Timeout (inconclusive)
 
@@ -16,8 +19,10 @@
 
   Key results:
   - `ValidatedRule`: a candidate that has been formally validated
+  - `ValidatedRelationRule`: a candidate validated as a relation rule (v2.1)
   - `ValidationResult`: valid / invalid / timeout
-  - `validateCandidate`: attempt validation
+  - `validateCandidate`: attempt validation (equality mode)
+  - `validateCandidateWithMode`: attempt validation for any relation mode
 -/
 import LambdaSat.Ruler.CVecMatcher
 import LambdaSat.SoundRule
@@ -63,6 +68,24 @@ structure ValidatedRule where
   method : String
 
 -- ══════════════════════════════════════════════════════════════════
+-- Section 2b: ValidatedRelationRule (v2.1)
+-- ══════════════════════════════════════════════════════════════════
+
+/-- A validated relation rule: a candidate pair confirmed as a sound relation
+    (not just equality). Includes the detected relation type. -/
+structure ValidatedRelationRule where
+  /-- The original candidate pair -/
+  candidate : CandidatePair
+  /-- A human-readable name for the discovered rule -/
+  name : String
+  /-- Number of test inputs used during CVec matching -/
+  numTests : Nat
+  /-- Validation method used -/
+  method : String
+  /-- The detected relation type -/
+  relation : DetectedRelation
+
+-- ══════════════════════════════════════════════════════════════════
 -- Section 3: Validation Procedure
 -- ══════════════════════════════════════════════════════════════════
 
@@ -98,6 +121,46 @@ def validateCandidates (evalOp : Nat → List Nat → Nat)
     | _ => none
 
 -- ══════════════════════════════════════════════════════════════════
+-- Section 3b: Multi-Mode Validation (v2.1)
+-- ══════════════════════════════════════════════════════════════════
+
+/-- Validate a candidate pair using a specific CVec match mode.
+    For equality mode, falls back to standard validation.
+    For relation modes, checks that the relation holds on extra inputs. -/
+def validateCandidateWithMode (evalOp : Nat → List Nat → Nat)
+    (extraInputs : Array (Nat → Nat))
+    (mode : CVecMatchMode)
+    (pair : CandidatePair) : ValidationResult :=
+  let lhsVec := evaluateCVec evalOp extraInputs pair.lhs
+  let rhsVec := evaluateCVec evalOp extraInputs pair.rhs
+  if cvecMatchWith mode lhsVec rhsVec then .valid
+  else
+    let counterexample := Array.zipWith (fun l r => if l == r then (0 : Nat) else 1) lhsVec rhsVec
+    .invalid counterexample
+
+/-- Validate a list of candidate pairs with their detected relations.
+    Each candidate's `relation` field determines the validation mode.
+    Returns `ValidatedRelationRule`s for those that pass. -/
+def validateRelationCandidates (evalOp : Nat → List Nat → Nat)
+    (extraInputs : Array (Nat → Nat))
+    (candidates : List CandidatePair) : List ValidatedRelationRule :=
+  candidates.filterMap fun pair =>
+    let mode := match pair.relation with
+      | .eq => CVecMatchMode.eq
+      | .le => CVecMatchMode.le
+      | .dvd => CVecMatchMode.dvd
+      | .modN n => CVecMatchMode.modN n
+      | .conditional _ _ => CVecMatchMode.conditional
+    match validateCandidateWithMode evalOp extraInputs mode pair with
+    | .valid =>
+      some { candidate := pair
+             name := "rule_validated_relation"
+             numTests := extraInputs.size
+             method := "cvec_testing_multimode"
+             relation := pair.relation }
+    | _ => none
+
+-- ══════════════════════════════════════════════════════════════════
 -- Section 4: Properties
 -- ══════════════════════════════════════════════════════════════════
 
@@ -115,12 +178,29 @@ theorem validateCandidates_subset (evalOp : Nat → List Nat → Nat)
   simp [validateCandidates]
   exact List.length_filterMap_le _ _
 
+/-- validateRelationCandidates on empty list is empty. -/
+theorem validateRelationCandidates_empty (evalOp : Nat → List Nat → Nat)
+    (extraInputs : Array (Nat → Nat)) :
+    validateRelationCandidates evalOp extraInputs [] = [] := by
+  simp [validateRelationCandidates]
+
+/-- validateRelationCandidates produces at most as many rules as inputs. -/
+theorem validateRelationCandidates_subset (evalOp : Nat → List Nat → Nat)
+    (extraInputs : Array (Nat → Nat))
+    (candidates : List CandidatePair) :
+    (validateRelationCandidates evalOp extraInputs candidates).length ≤ candidates.length := by
+  simp [validateRelationCandidates]
+  exact List.length_filterMap_le _ _
+
 -- ══════════════════════════════════════════════════════════════════
 -- Section 5: Smoke tests
 -- ══════════════════════════════════════════════════════════════════
 
 /-- Empty candidates yield empty validated rules. -/
 example : validateCandidates (fun _ _ => 0) #[] [] = [] := rfl
+
+/-- Empty candidates yield empty validated relation rules. -/
+example : validateRelationCandidates (fun _ _ => 0) #[] [] = [] := rfl
 
 end Ruler
 

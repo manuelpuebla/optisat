@@ -1,17 +1,23 @@
 /-
   LambdaSat — Ruler/CVecMatcher: CVec-Based Candidate Pair Generation
   Fase 20 Subfase 3: Group patterns by CVec, generate candidate equalities.
+  Fase 14 (v2.1): Multi-mode matching for non-equality relations.
 
   Patterns with identical CVecs are candidates for equality rules.
   This module groups patterns by their CVec hash and generates all
   candidate pairs within each bucket.
 
+  v2.1 extension: `DetectedRelation` tags each candidate with the
+  relation detected (eq/le/dvd/modN/conditional). `cvecMatchWithMode`
+  and `cvecMatchMultiMode` scan for non-equality relations.
+
   Reference: Nandi et al., "Ruler: Rewrite Rule Synthesis" (OOPSLA 2021)
 
   Key results:
-  - `CandidatePair`: two patterns with matching CVecs
-  - `cvecMatch`: group by CVec hash, generate candidate pairs
-  - `cvecMatch_subset`: candidates come from the workload
+  - `CandidatePair`: two patterns with matching CVecs + detected relation
+  - `cvecMatch`: group by CVec hash, generate equality candidate pairs
+  - `cvecMatchWithMode`: generate candidates for a specific relation mode
+  - `cvecMatchMultiMode`: scan all modes, return best match per pair
 -/
 import LambdaSat.Ruler.CVecEngine
 
@@ -25,8 +31,22 @@ namespace Ruler
 -- Section 1: CandidatePair
 -- ══════════════════════════════════════════════════════════════════
 
-/-- A candidate pair: two patterns whose CVecs match.
-    These are candidates for equality rules (they agree on all test inputs). -/
+/-- The type of relation detected by CVec matching. -/
+inductive DetectedRelation where
+  /-- Equality: lhs = rhs -/
+  | eq : DetectedRelation
+  /-- Less-or-equal: lhs ≤ rhs -/
+  | le : DetectedRelation
+  /-- Divisibility: lhs ∣ rhs -/
+  | dvd : DetectedRelation
+  /-- Modular congruence: lhs ≡ rhs (mod n) -/
+  | modN (n : Nat) : DetectedRelation
+  /-- Conditional equality: P → lhs = rhs, with agreeing positions -/
+  | conditional (agreeCount total : Nat) : DetectedRelation
+  deriving Repr, BEq, DecidableEq
+
+/-- A candidate pair: two patterns whose CVecs match under some relation.
+    These are candidates for rewrite/relation rules. -/
 structure CandidatePair where
   /-- Left-hand side pattern -/
   lhs : Pattern Nat
@@ -34,6 +54,8 @@ structure CandidatePair where
   rhs : Pattern Nat
   /-- The shared CVec (for debugging/verification) -/
   cvec : CVec
+  /-- The detected relation (default: equality) -/
+  relation : DetectedRelation := .eq
 
 -- ══════════════════════════════════════════════════════════════════
 -- Section 2: Bucketing by CVec
@@ -95,6 +117,78 @@ def numCandidates (evalOp : Nat → List Nat → Nat)
   (cvecMatch evalOp inputs w).length
 
 -- ══════════════════════════════════════════════════════════════════
+-- Section 3b: Multi-Mode Matching (v2.1)
+-- ══════════════════════════════════════════════════════════════════
+
+/-- Convert a CVecMatchMode to a DetectedRelation. -/
+def modeToRelation (mode : CVecMatchMode) : DetectedRelation :=
+  match mode with
+  | .eq => .eq
+  | .le => .le
+  | .dvd => .dvd
+  | .modN n => .modN n
+  | .conditional => .conditional 0 0
+
+/-- Generate candidate pairs using a specific match mode.
+    Unlike `cvecMatch` (equality-only via bucketing), this checks
+    all pattern pairs for the given relation mode. -/
+def cvecMatchWithMode (evalOp : Nat → List Nat → Nat)
+    (inputs : Array (Nat → Nat))
+    (mode : CVecMatchMode)
+    (w : Workload Nat) : List CandidatePair :=
+  let cvecs := w.patterns.map (evaluateCVec evalOp inputs)
+  let indexed := w.patterns.zip cvecs
+  let rec checkPairs : List (Pattern Nat × CVec) → List CandidatePair
+    | [] => []
+    | (p1, cv1) :: rest =>
+      let found := rest.filterMap fun (p2, cv2) =>
+        if cvecMatchWith mode cv1 cv2 then
+          let rel := match mode with
+            | .conditional =>
+              let (agree, total) := cvecAgreeFraction cv1 cv2
+              DetectedRelation.conditional agree total
+            | _ => modeToRelation mode
+          some { lhs := p1, rhs := p2, cvec := cv1, relation := rel }
+        else none
+      found ++ checkPairs rest
+  checkPairs indexed
+
+/-- Scan all modes for a pair of CVecs and return the most specific match.
+    Priority: eq > dvd > modN > le > conditional.
+    (dvd before le because a ∣ b → a ≤ b for Nat, so dvd is stronger.)
+    Returns `none` if no relation detected. -/
+def detectRelation (cv1 cv2 : CVec) (moduli : List Nat := [2, 3, 5, 7]) :
+    Option DetectedRelation :=
+  if cvecEqual cv1 cv2 then some .eq
+  else if cvecDvd cv1 cv2 then some .dvd
+  else
+    match moduli.find? (fun n => cvecModEq cv1 cv2 n) with
+    | some n => some (.modN n)
+    | none =>
+      if cvecLe cv1 cv2 then some .le
+      else
+        let (agree, total) := cvecAgreeFraction cv1 cv2
+        if cvecConditionalMatch cv1 cv2 then some (.conditional agree total)
+        else none
+
+/-- Generate candidate pairs by scanning ALL relation modes.
+    For each pattern pair, detect the strongest relation. -/
+def cvecMatchMultiMode (evalOp : Nat → List Nat → Nat)
+    (inputs : Array (Nat → Nat))
+    (w : Workload Nat)
+    (moduli : List Nat := [2, 3, 5, 7]) : List CandidatePair :=
+  let cvecs := w.patterns.map (evaluateCVec evalOp inputs)
+  let indexed := w.patterns.zip cvecs
+  let rec checkPairs : List (Pattern Nat × CVec) → List CandidatePair
+    | [] => []
+    | (p1, cv1) :: rest =>
+      let found := rest.filterMap fun (p2, cv2) =>
+        (detectRelation cv1 cv2 moduli).map fun rel =>
+          { lhs := p1, rhs := p2, cvec := cv1, relation := rel }
+      found ++ checkPairs rest
+  checkPairs indexed
+
+-- ══════════════════════════════════════════════════════════════════
 -- Section 4: Properties
 -- ══════════════════════════════════════════════════════════════════
 
@@ -111,12 +205,45 @@ theorem allPairs_nil {α : Type} : allPairs ([] : List α) = [] := rfl
 theorem allPairs_singleton {α : Type} (a : α) : allPairs [a] = [] := by
   simp [allPairs]
 
+/-- cvecMatchWithMode on empty workload produces no candidates. -/
+theorem cvecMatchWithMode_empty (evalOp : Nat → List Nat → Nat)
+    (inputs : Array (Nat → Nat)) (mode : CVecMatchMode) :
+    cvecMatchWithMode evalOp inputs mode Workload.empty = [] := by
+  unfold cvecMatchWithMode
+  simp only [Workload.empty, List.map_nil, List.zip_nil_left]
+  rfl
+
+/-- cvecMatchMultiMode on empty workload produces no candidates. -/
+theorem cvecMatchMultiMode_empty (evalOp : Nat → List Nat → Nat)
+    (inputs : Array (Nat → Nat)) (moduli : List Nat) :
+    cvecMatchMultiMode evalOp inputs Workload.empty moduli = [] := by
+  unfold cvecMatchMultiMode
+  simp only [Workload.empty, List.map_nil, List.zip_nil_left]
+  rfl
+
+/-- detectRelation on identical CVecs returns eq. -/
+theorem detectRelation_refl (cv : CVec) (moduli : List Nat) :
+    detectRelation cv cv moduli = some .eq := by
+  simp [detectRelation, cvecEqual_refl]
+
 -- ══════════════════════════════════════════════════════════════════
 -- Section 5: Smoke tests
 -- ══════════════════════════════════════════════════════════════════
 
 /-- No candidates from empty workload (verified by cvecMatch_empty). -/
 example : allPairs ([] : List Nat) = [] := rfl
+
+/-- detectRelation: equal CVecs → eq. -/
+example : detectRelation #[1,2,3] #[1,2,3] [] = some .eq := by native_decide
+
+/-- detectRelation: ≤ CVecs → le (when dvd doesn't hold). -/
+example : detectRelation #[2,3] #[3,4] [] = some .le := by native_decide
+
+/-- detectRelation: divisibility → dvd. -/
+example : detectRelation #[2,3] #[4,9] [] = some .dvd := by native_decide
+
+/-- detectRelation: mod 3 → modN 3. -/
+example : detectRelation #[1,4] #[4,7] [3] = some (.modN 3) := by native_decide
 
 end Ruler
 

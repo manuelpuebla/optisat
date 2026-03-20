@@ -111,6 +111,16 @@ where
 def allEdges (g : DirectedRelGraph) : List (EClassId × EClassId) :=
   (g.edges.toList.map fun (src, dsts) => dsts.map fun dst => (src, dst)).flatten
 
+/-- Canonicalize all edges using a find function (e.g., UF root).
+    Maps each edge (src, dst) → (find src, find dst), deduplicating. -/
+def canonicalize (g : DirectedRelGraph) (find : EClassId → EClassId) : DirectedRelGraph :=
+  g.allEdges.foldl (fun acc (src, dst) =>
+    let src' := find src
+    let dst' := find dst
+    if acc.hasDirectEdge src' dst' then acc
+    else acc.addEdge src' dst') DirectedRelGraph.empty
+
+
 end DirectedRelGraph
 
 -- ══════════════════════════════════════════════════════════════════

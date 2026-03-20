@@ -20,6 +20,7 @@ import LambdaSat.ColoredSpec
 import LambdaSat.DirectedRelSpec
 import LambdaSat.Util.PhasedSaturation
 import LambdaSat.SaturationSpec
+import LambdaSat.MultiPatternMatch
 
 set_option autoImplicit false
 
@@ -123,12 +124,24 @@ def relStep (mreg : MultiRelEGraph Op) : MultiRelEGraph Op :=
   mreg
 
 /-- Apply a single cross-relation step.
-    Check for antisymmetry promotions and add equality merges.
-    (Sketch: actual cross-relation rule application would go here.) -/
-def crossStep (mreg : MultiRelEGraph Op) : MultiRelEGraph Op :=
-  -- In the sketch phase, this is identity. The actual implementation
-  -- would scan for bidirectional paths and promote to merges.
-  mreg
+    For each pair of relation DAGs (i, j), scan for antisymmetry:
+    if a Ri b AND b Rj a, then merge(a, b) in the base graph.
+    When i = j, this detects self-antisymmetry (e.g., a ≤ b ∧ b ≤ a → a = b).
+    After merging, canonicalize relDag edges to use current UF representatives. -/
+def crossStep (cfg : TieredSatConfig) (mreg : MultiRelEGraph Op) : MultiRelEGraph Op :=
+  -- Collect all merge pairs from all DAG pairs
+  let merges := mreg.relDags.flatMap fun dagR =>
+    mreg.relDags.flatMap fun dagR' =>
+      matchCrossRule dagR dagR'
+  -- Apply discovered merges to the base graph
+  if merges.isEmpty then mreg
+  else
+    let g' := applyMerges mreg.baseGraph merges
+    let g'' := rebuildF g' cfg.rebuildFuel
+    -- Canonicalize relDag edges to use updated UF representatives
+    let find := fun id => UnionFind.root g''.unionFind id
+    let relDags' := mreg.relDags.map (fun dag => dag.canonicalize find)
+    { mreg with baseGraph := g'', relDags := relDags' }
 
 -- ══════════════════════════════════════════════════════════════════
 -- Section 5: Tiered Saturation Loop
@@ -148,7 +161,7 @@ def tieredStep (rules : List (RewriteRule Op)) (cfg : TieredSatConfig)
     else mreg
   -- Apply cross-relation rules (Layer 2↔3) every crossFreq iterations
   let mreg := if iter % cfg.crossFreq == 0
-    then crossStep mreg
+    then crossStep cfg mreg
     else mreg
   mreg
 

@@ -1,6 +1,6 @@
 # OptiSat
 
-Formally verified equality saturation engine in Lean 4, parameterized by typeclasses. OptiSat provides a domain-agnostic e-graph with 363 theorems, **zero sorry**, zero custom axioms, and a machine-checked soundness chain from union-find operations through pattern matching, saturation, and extraction — with **zero external hypotheses** in the final pipeline theorem, **verified DP-optimal extraction** via treewidth decomposition, **user-facing pipeline soundness** via `optimizeF_soundness`, and **extraction completeness** via `extractAuto_complete`.
+Formally verified equality saturation engine in Lean 4, parameterized by typeclasses. OptiSat provides a domain-agnostic e-graph with 622+ theorems, **zero sorry**, zero custom axioms, and a machine-checked soundness chain from union-find operations through pattern matching, saturation, and extraction — with **zero external hypotheses** in the v1 pipeline theorem (`full_pipeline_soundness`) and the backward-compatible v2 theorem (`v2_implies_v1_soundness`). Features **verified DP-optimal extraction** via treewidth decomposition, **user-facing pipeline soundness** via `optimizeF_soundness`, **extraction completeness** via `extractAuto_complete`, **multi-relation colored e-graphs** (v2.0), **CVec-based multi-mode rule discovery** (v2.1), **compiled 2-pattern cross-relation matching** (v2.1), and a **self-improvement loop** (v2.1).
 
 Generalized from [VR1CS-Lean](https://github.com/manuel0921/vr1cs-lean) v1.3.0.
 
@@ -220,7 +220,7 @@ OptiSat/
 
 ## Extraction modes
 
-OptiSat supports two extraction strategies, both with verified soundness:
+OptiSat supports three extraction strategies, all with verified soundness:
 
 | Mode | Strategy | Theorem | TCB |
 |------|----------|---------|-----|
@@ -231,6 +231,10 @@ OptiSat supports two extraction strategies, both with verified soundness:
 All three are unified under `extract_correct` (v1.3.0+), which dispatches by `ExtractionStrategy`.
 
 The ILP solver (HiGHS or built-in branch-and-bound) is outside the TCB — its output is validated by `checkSolution` before extraction.
+
+**Cost function requirement**: Extraction completeness (`extractAuto_complete`) requires the cost function to be **strictly positive**: `∀ node, costFn node ≥ 1`. If `costFn` returns 0 for any node, the bestNode DAG may contain cycles and extraction may loop. A safe default is `fun _ => 1` (uniform cost).
+
+**DP tree decomposition**: The DP strategy requires a `ValidNTD` proof — a verified nice tree decomposition of the e-graph. OptiSat validates NTDs but does **not generate them** (tree decomposition is NP-hard). Users can construct NTDs using external tools (e.g., [PACE challenge solvers](https://pacechallenge.org/)) and verify them with `ValidNTD`. This is an intentional architectural decision: the solver is outside the TCB, the validator is inside.
 
 ### Trusted Computing Base (TCB)
 
@@ -264,5 +268,5 @@ Outside the TCB:
 | Fase 12: API-Specification Bridge | Complete | Verified pipeline functions + user-facing soundness (optimizeF_soundness, optimizeWithStrategyF_soundness) |
 | Fase 13: Completeness | Complete | bestNode DAG acyclicity, fuel sufficiency, extraction completeness (extractAuto_complete) |
 
-**Current version: v1.5.2** — 363 theorems, **zero sorry**, zero custom axioms, **zero external hypotheses** in `full_pipeline_soundness`, **verified DP-optimal extraction** via `dp_optimal_of_validNTD`, **user-facing pipeline soundness** via `optimizeF_soundness`, **extraction completeness** via `extractAuto_complete`.
+**Current version: v2.1.1** — 622+ theorems, **zero sorry**, zero custom axioms. v1 path: **zero external hypotheses** in `full_pipeline_soundness`. v2 path: conditional soundness with `h_eq_step`/`h_cross_step` hypotheses; backward-compatible `v2_implies_v1_soundness` has zero hypotheses for `ofBase` callers. Features: multi-relation colored e-graphs, CVec multi-mode rule discovery, compiled 2-pattern matching, self-improvement loop, verified DP-optimal extraction, extraction completeness.
 
